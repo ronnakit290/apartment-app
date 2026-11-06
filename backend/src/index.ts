@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import { registerAuth, type AuthEnv } from './auth'
 import { currentMonth, db, getSettings, monthAdd } from './db'
+import { requireTurnstile, turnstileSiteKey } from './turnstile'
 import { bills, inquiries, rooms, settings, tenants, tickets } from './schema'
 
 const app = new Hono<AuthEnv>().basePath('/api')
@@ -280,12 +281,14 @@ app.get('/public', (c) => {
     vacant_rooms: all.filter((r) => r.status === 'vacant').map((r) => ({ number: r.number, floor: r.floor, type: r.type, size: r.size, rent: r.rent })),
     total_rooms: all.length,
     building: all.map((r) => ({ number: r.number, floor: r.floor, vacant: r.status === 'vacant' })),
+    turnstile_site_key: turnstileSiteKey,
   })
 })
 app.post('/public/inquiries', async (c) => {
   const b = await c.req.json()
   if (!b.name?.trim()) bad('กรุณากรอกชื่อ')
   if (!/^[0-9+\-\s]{9,15}$/.test(b.phone ?? '')) bad('กรุณากรอกเบอร์โทรให้ถูกต้อง')
+  await requireTurnstile(c, b.turnstile_token)
   db.insert(inquiries).values({
     name: b.name.trim().slice(0, 100), phone: b.phone.trim(), room_type: b.room_type || null,
     move_in: b.move_in || null, message: String(b.message ?? '').slice(0, 1000) || null,

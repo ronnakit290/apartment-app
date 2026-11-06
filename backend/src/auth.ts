@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { HTTPException } from 'hono/http-exception'
 import { db } from './db'
 import { sessions, users } from './schema'
+import { requireTurnstile, turnstileSiteKey } from './turnstile'
 
 export type Role = 'owner' | 'staff'
 export type AuthUser = { id: number; username: string; name: string; role: Role }
@@ -92,7 +93,7 @@ export function registerAuth(app: Hono<AuthEnv>) {
 
   app.get('/auth/status', (c) => {
     const hasUsers = !!db.select({ id: users.id }).from(users).limit(1).get()
-    return c.json({ needs_setup: !hasUsers, user: sessionUser(c) })
+    return c.json({ needs_setup: !hasUsers, user: sessionUser(c), turnstile_site_key: turnstileSiteKey })
   })
 
   // first-run: create the owner account (only when no users exist)
@@ -100,6 +101,7 @@ export function registerAuth(app: Hono<AuthEnv>) {
     if (db.select({ id: users.id }).from(users).limit(1).get()) fail(403, 'ตั้งค่าบัญชีเจ้าของไปแล้ว')
     const b = await c.req.json()
     const username = validateCredentials(b.username, b.password)
+    await requireTurnstile(c, b.turnstile_token)
     const name = String(b.name ?? '').trim() || username
     const u = db.insert(users).values({
       username, name, role: 'owner', password_hash: await Bun.password.hash(String(b.password)),
@@ -113,6 +115,7 @@ export function registerAuth(app: Hono<AuthEnv>) {
     const username = String(b.username ?? '').trim().toLowerCase()
     const key = throttleKey(c, username)
     checkThrottle(key)
+    await requireTurnstile(c, b.turnstile_token)
     const u = db.select().from(users).where(eq(users.username, username)).get()
     const ok = u && u.active === 1 && (await Bun.password.verify(String(b.password ?? ''), u.password_hash))
     if (!ok) {

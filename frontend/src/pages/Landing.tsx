@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useState, type FormEvent } from 'react'
 import { api, type PublicInfo } from '../lib/api'
 import { baht } from '../lib/format'
+import { Turnstile } from '../lib/turnstile'
 import { Icon, Loading, Reveal, useFetch } from '../lib/ui'
 
 const ease = [0.22, 1, 0.36, 1] as const
@@ -144,7 +145,7 @@ export default function Landing() {
               {data.address && <li><Icon name="pin" />{data.address}</li>}
             </ul>
           </div>
-          <InquiryForm types={data.types.map((t) => t.type)} />
+          <InquiryForm types={data.types.map((t) => t.type)} siteKey={data.turnstile_site_key} />
         </Reveal>
       </section>
 
@@ -187,7 +188,9 @@ function Building({ rooms }: { rooms: PublicInfo['building'] }) {
   )
 }
 
-function InquiryForm({ types }: { types: string[] }) {
+function InquiryForm({ types, siteKey }: { types: string[]; siteKey: string | null }) {
+  const [token, setToken] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const [f, setF] = useState({ name: '', phone: '', room_type: types[0] ?? '', move_in: '', message: '' })
   const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle')
   const [err, setErr] = useState('')
@@ -197,13 +200,17 @@ function InquiryForm({ types }: { types: string[] }) {
   async function submit(e: FormEvent) {
     e.preventDefault()
     setErr('')
+    if (siteKey && !token) return setErr('กรุณายืนยันว่าคุณไม่ใช่บอท')
     setState('sending')
     try {
-      await api.post('/public/inquiries', f)
+      await api.post('/public/inquiries', { ...f, turnstile_token: token })
       setState('done')
     } catch (x) {
       setErr((x as Error).message)
       setState('idle')
+    } finally {
+      setToken('')
+      setAttempt((n) => n + 1)
     }
   }
 
@@ -228,8 +235,9 @@ function InquiryForm({ types }: { types: string[] }) {
         <label className="field"><span className="field-label">วันที่ต้องการเข้าอยู่</span><input type="date" value={f.move_in} onChange={set('move_in')} /></label>
       </div>
       <label className="field"><span className="field-label">ข้อความเพิ่มเติม</span><textarea rows={3} value={f.message} onChange={set('message')} placeholder="เช่น ต้องการนัดดูห้องวันเสาร์" /></label>
+      <Turnstile key={attempt} siteKey={siteKey} onToken={setToken} />
       <AnimatePresence>{err && <motion.p className="form-err" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>{err}</motion.p>}</AnimatePresence>
-      <button className="btn btn-accent btn-lg btn-block" disabled={state === 'sending'}>{state === 'sending' ? 'กำลังส่ง…' : 'ส่งข้อมูลนัดดูห้อง'}</button>
+      <button className="btn btn-accent btn-lg btn-block" disabled={state === 'sending' || (!!siteKey && !token)}>{state === 'sending' ? 'กำลังส่ง…' : 'ส่งข้อมูลนัดดูห้อง'}</button>
     </form>
   )
 }

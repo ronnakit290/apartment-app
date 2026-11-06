@@ -132,6 +132,7 @@ export interface PublicInfo {
   vacant_rooms: { number: string; floor: number; type: string; size: number; rent: number }[]
   total_rooms: number
   building: { number: string; floor: number; vacant: boolean }[]
+  turnstile_site_key: string | null
 }
 
 export type Role = 'owner' | 'staff'

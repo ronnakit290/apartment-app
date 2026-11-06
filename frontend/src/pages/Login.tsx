@@ -2,10 +2,13 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useState, type FormEvent } from 'react'
 import { api, type AuthUser } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { Turnstile } from '../lib/turnstile'
 import { Icon } from '../lib/ui'
 
 export default function Login() {
-  const { needsSetup, setUser } = useAuth()
+  const { needsSetup, setUser, turnstileSiteKey } = useAuth()
+  const [token, setToken] = useState('')
+  const [attempt, setAttempt] = useState(0)
   const [f, setF] = useState({ name: '', username: '', password: '', confirm: '' })
   const [show, setShow] = useState(false)
   const [err, setErr] = useState('')
@@ -16,12 +19,16 @@ export default function Login() {
     e.preventDefault()
     setErr('')
     if (needsSetup && f.password !== f.confirm) return setErr('รหัสผ่านทั้งสองช่องไม่ตรงกัน')
+    if (turnstileSiteKey && !token) return setErr('กรุณายืนยันว่าคุณไม่ใช่บอท')
     setBusy(true)
     try {
-      const res = await api.post<{ user: AuthUser }>(needsSetup ? '/auth/setup' : '/auth/login', f)
+      const res = await api.post<{ user: AuthUser }>(needsSetup ? '/auth/setup' : '/auth/login', { ...f, turnstile_token: token })
       setUser(res.user)
     } catch (x) {
       setErr((x as Error).message)
+      // Turnstile tokens are single-use: get a fresh widget for the next try
+      setToken('')
+      setAttempt((n) => n + 1)
     } finally {
       setBusy(false)
     }
@@ -68,13 +75,14 @@ export default function Login() {
             <label className="field"><span className="field-label">ยืนยันรหัสผ่าน</span>
               <input type={show ? 'text' : 'password'} value={f.confirm} onChange={set('confirm')} required autoComplete="new-password" /></label>
           )}
+          <Turnstile key={attempt} siteKey={turnstileSiteKey} onToken={setToken} />
           <AnimatePresence>
             {err && (
               <motion.p className="form-err login-err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto', x: [0, -6, 6, -3, 3, 0] }}
                 exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.35 }}>{err}</motion.p>
             )}
           </AnimatePresence>
-          <motion.button className="btn btn-primary btn-lg btn-block" disabled={busy} whileTap={{ scale: 0.98 }}>
+          <motion.button className="btn btn-primary btn-lg btn-block" disabled={busy || (!!turnstileSiteKey && !token)} whileTap={{ scale: 0.98 }}>
             {busy ? 'กำลังดำเนินการ…' : needsSetup ? 'สร้างบัญชีและเข้าสู่ระบบ' : 'เข้าสู่ระบบ'}
           </motion.button>
           <a href="#/" className="login-back">← กลับหน้าเว็บไซต์</a>
