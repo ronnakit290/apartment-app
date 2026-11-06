@@ -66,6 +66,7 @@ export interface Bill {
   status: 'paid' | 'unpaid'
   paid_at: string | null
   method: string | null
+  created_at: string
   room_number: string
   floor: number
   tenant_name: string | null

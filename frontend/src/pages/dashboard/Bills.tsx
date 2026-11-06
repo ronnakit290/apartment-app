@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { api, type Bill, type Settings } from '../../lib/api'
+import { useEffect, useMemo, useState } from 'react'
+import { api, type Bill } from '../../lib/api'
 import { baht, currentMonth, dateLabel, monthLabel, nf } from '../../lib/format'
 import { Badge, Empty, Field, Icon, Loading, Modal, useFetch, useToast } from '../../lib/ui'
 import type { PageProps } from './Layout'
+import { PrintBills } from './BillPrint'
 import { METHOD, MonthPicker } from './shared'
 
 export default function Bills({ settings }: PageProps) {
@@ -14,11 +15,21 @@ export default function Bills({ settings }: PageProps) {
   if (status) qs.set('status', status)
   const { data, loading, reload } = useFetch<Bill[]>(`/bills?${qs}`)
   const [paying, setPaying] = useState<Bill | null>(null)
-  const [invoice, setInvoice] = useState<Bill | null>(null)
+  const [printing, setPrinting] = useState<Bill[] | null>(null)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  useEffect(() => setSelected(new Set()), [month, status, allMonths])
   const toast = useToast()
 
   const total = (data ?? []).reduce((s, b) => s + b.total, 0)
   const paid = (data ?? []).filter((b) => b.status === 'paid').reduce((s, b) => s + b.total, 0)
+  const allChecked = !!data?.length && data.every((b) => selected.has(b.id))
+  const toggle = (id: number) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set((data ?? []).map((b) => b.id)))
+  // print in room order so the stack of cut A5 bills comes out sorted
+  const toPrint = useMemo(() => {
+    const list = (data ?? []).filter((b) => !selected.size || selected.has(b.id))
+    return [...list].sort((a, b) => a.month.localeCompare(b.month) || a.room_number.localeCompare(b.room_number, undefined, { numeric: true }))
+  }, [data, selected])
 
   async function act(fn: () => Promise<unknown>, msg: string) {
     try { await fn(); toast(msg); reload() } catch (e) { toast((e as Error).message, 'err') }
@@ -31,10 +42,15 @@ export default function Bills({ settings }: PageProps) {
           {!allMonths && <MonthPicker value={month} onChange={setMonth} />}
           <label className="check"><input type="checkbox" checked={allMonths} onChange={(e) => setAllMonths(e.target.checked)} />ทุกเดือน</label>
         </div>
-        <div className="tabs">
-          {([['', 'ทั้งหมด'], ['unpaid', 'ค้างชำระ'], ['paid', 'ชำระแล้ว']] as const).map(([k, l]) => (
-            <button key={k} className={status === k ? 'active' : ''} onClick={() => setStatus(k)}>{l}</button>
-          ))}
+        <div className="row gap-sm wrap">
+          <div className="tabs">
+            {([['', 'ทั้งหมด'], ['unpaid', 'ค้างชำระ'], ['paid', 'ชำระแล้ว']] as const).map(([k, l]) => (
+              <button key={k} className={status === k ? 'active' : ''} onClick={() => setStatus(k)}>{l}</button>
+            ))}
+          </div>
+          <button className="btn btn-primary" disabled={!toPrint.length || !settings} onClick={() => setPrinting(toPrint)}>
+            <Icon name="print" />{selected.size ? `พิมพ์บิลที่เลือก (${toPrint.length})` : `พิมพ์บิลทั้งหมด (${toPrint.length})`}
+          </button>
         </div>
       </div>
 
@@ -51,10 +67,11 @@ export default function Bills({ settings }: PageProps) {
         ) : (
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>ห้อง</th><th>เดือน</th><th>ผู้เช่า</th><th className="num">ค่าเช่า</th><th className="num">ไฟ</th><th className="num">น้ำ</th><th className="num">รวม</th><th>สถานะ</th><th /></tr></thead>
+              <thead><tr><th className="col-check"><input type="checkbox" aria-label="เลือกทั้งหมด" checked={allChecked} onChange={toggleAll} /></th><th>ห้อง</th><th>เดือน</th><th>ผู้เช่า</th><th className="num">ค่าเช่า</th><th className="num">ไฟ</th><th className="num">น้ำ</th><th className="num">รวม</th><th>สถานะ</th><th /></tr></thead>
               <tbody>
                 {data.map((b) => (
-                  <tr key={b.id}>
+                  <tr key={b.id} className={selected.has(b.id) ? 'row-selected' : ''}>
+                    <td className="col-check"><input type="checkbox" aria-label={`เลือกห้อง ${b.room_number}`} checked={selected.has(b.id)} onChange={() => toggle(b.id)} /></td>
                     <td><span className="room-chip">{b.room_number}</span></td>
                     <td>{monthLabel(b.month)}</td>
                     <td>{b.tenant_name ?? '-'}</td>
@@ -66,7 +83,7 @@ export default function Bills({ settings }: PageProps) {
                       ? <Badge tone="green">{METHOD[b.method ?? ''] ?? 'ชำระแล้ว'} · {dateLabel(b.paid_at)}</Badge>
                       : <Badge tone="red">ค้างชำระ</Badge>}</td>
                     <td className="actions">
-                      <button className="icon-btn" title="ใบแจ้งหนี้" onClick={() => setInvoice(b)}><Icon name="print" size={17} /></button>
+                      <button className="icon-btn" title="พิมพ์บิล A5" onClick={() => setPrinting([b])}><Icon name="print" size={17} /></button>
                       {b.status === 'unpaid' ? <>
                         <button className="btn btn-sm btn-primary" onClick={() => setPaying(b)}>รับชำระ</button>
                         <button className="icon-btn" title="ลบบิล" onClick={() => confirm(`ลบบิลห้อง ${b.room_number}?`) && act(() => api.del(`/bills/${b.id}`), 'ลบบิลแล้ว')}><Icon name="trash" size={16} /></button>
@@ -81,7 +98,7 @@ export default function Bills({ settings }: PageProps) {
       </div>
 
       {paying && <PayModal bill={paying} onClose={() => setPaying(null)} onSaved={() => { setPaying(null); reload() }} />}
-      {invoice && settings && <InvoiceModal bill={invoice} settings={settings} onClose={() => setInvoice(null)} />}
+      {printing && settings && <PrintBills bills={printing} settings={settings} onClose={() => setPrinting(null)} />}
     </div>
   )
 }
@@ -107,47 +124,6 @@ function PayModal({ bill, onClose, onSaved }: { bill: Bill; onClose: () => void;
         ))}
       </div>
       <Field label="วันที่รับเงิน"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-    </Modal>
-  )
-}
-
-function InvoiceModal({ bill, settings, onClose }: { bill: Bill; settings: Settings; onClose: () => void }) {
-  const eu = bill.elec_curr - bill.elec_prev
-  const wu = bill.water_curr - bill.water_prev
-  const [y, m] = bill.month.split('-').map(Number)
-  const due = new Date(y, m, settings.due_day)
-  return (
-    <Modal wide title="ใบแจ้งหนี้" onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>ปิด</button><button className="btn btn-primary" onClick={() => window.print()}><Icon name="print" />พิมพ์ / บันทึก PDF</button></>}>
-      <div className="invoice" id="print-area">
-        <header className="inv-head">
-          <div><h2>{settings.name}</h2><p>{settings.address}</p><p>โทร {settings.phone}</p></div>
-          <div className="inv-meta">
-            <h3>{bill.status === 'paid' ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้'}</h3>
-            <p>เลขที่ INV-{bill.month.replace('-', '')}-{bill.room_number}</p>
-            <p>ประจำเดือน {monthLabel(bill.month, true)}</p>
-          </div>
-        </header>
-        <div className="inv-to"><span>ห้อง <b>{bill.room_number}</b></span><span>ผู้เช่า <b>{bill.tenant_name}</b></span></div>
-        <table className="table inv-table">
-          <thead><tr><th>รายการ</th><th className="num">ครั้งก่อน</th><th className="num">ครั้งนี้</th><th className="num">หน่วย</th><th className="num">ราคา/หน่วย</th><th className="num">จำนวนเงิน</th></tr></thead>
-          <tbody>
-            <tr><td>ค่าเช่าห้อง</td><td /><td /><td /><td /><td className="num">{nf(bill.rent)}</td></tr>
-            <tr><td>ค่าไฟฟ้า</td><td className="num">{nf(bill.elec_prev)}</td><td className="num">{nf(bill.elec_curr)}</td><td className="num">{eu}</td><td className="num">{bill.elec_rate}</td><td className="num">{nf(eu * bill.elec_rate)}</td></tr>
-            <tr><td>ค่าน้ำประปา</td><td className="num">{nf(bill.water_prev)}</td><td className="num">{nf(bill.water_curr)}</td><td className="num">{wu}</td><td className="num">{bill.water_rate}</td><td className="num">{nf(wu * bill.water_rate)}</td></tr>
-            {bill.other !== 0 && <tr><td>{bill.other_note || 'ค่าใช้จ่ายอื่นๆ'}</td><td /><td /><td /><td /><td className="num">{nf(bill.other)}</td></tr>}
-          </tbody>
-          <tfoot><tr><td colSpan={5}>รวมทั้งสิ้น</td><td className="num">{baht(bill.total)}</td></tr></tfoot>
-        </table>
-        {bill.status === 'paid' ? (
-          <p className="inv-paid">ชำระแล้ว ({METHOD[bill.method ?? ''] ?? '-'}) เมื่อ {dateLabel(bill.paid_at)}</p>
-        ) : (
-          <div className="inv-pay">
-            <p>กรุณาชำระภายในวันที่ <b>{dateLabel(due.toISOString())}</b> · ล่าช้าปรับวันละ {settings.late_fee} บาท</p>
-            {settings.bank_account && <p>โอนเข้าบัญชี {settings.bank_name} เลขที่ <b>{settings.bank_account}</b> ชื่อบัญชี {settings.bank_holder}</p>}
-          </div>
-        )}
-      </div>
     </Modal>
   )
 }

@@ -352,16 +352,6 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--brand); 
 .settings .card { display: flex; flex-direction: column; gap: 14px; }
 .settings .card .muted { margin-top: -10px; font-size: 13.5px; }
 
-.invoice { display: flex; flex-direction: column; gap: 18px; font-size: 14px; }
-.inv-head { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 2px solid var(--ink); }
-.inv-head h2 { font-size: 20px; }
-.inv-head p { color: var(--ink-2); font-size: 13px; }
-.inv-meta { text-align: right; }
-.inv-meta h3 { font-size: 18px; color: var(--brand); }
-.inv-to { display: flex; gap: 28px; }
-.inv-table tfoot td { font-weight: 700; font-size: 16px; border-top: 2px solid var(--ink); padding-top: 12px; }
-.inv-paid { color: var(--green); font-weight: 600; }
-.inv-pay { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1080px) {
@@ -410,13 +400,6 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--brand); 
   .hero-stats dd { font-size: 22px; }
 }
 
-/* ---------- print (invoice) ---------- */
-@media print {
-  body * { visibility: hidden; }
-  #print-area, #print-area * { visibility: visible; }
-  #print-area { position: absolute; inset: 0; padding: 24px; }
-  .modal-backdrop { position: static; background: none; }
-}
 
 /* ---------- login ---------- */
 .login-page { min-height: 100dvh; display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); }
@@ -460,3 +443,52 @@ input[type='checkbox'] { width: 17px; height: 17px; accent-color: var(--brand); 
 .side-foot { margin-top: 0; border-top: 1px solid rgb(255 255 255 / .08); padding-top: 12px; }
 
 .turnstile { min-height: 65px; display: flex; justify-content: center; }
+
+/* ---------- A5 bill printing (2 per A4) ---------- */
+body.printing { overflow: hidden; }
+#print-root { position: fixed; inset: 0; z-index: 60; overflow: auto; background: #4b5468; }
+.print-toolbar { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
+.print-pages { padding: 24px 16px 48px; overflow-x: auto; }
+.a4-sheet { position: relative; width: 210mm; height: 297mm; margin: 0 auto 20px; background: #fff; color: #111; box-shadow: 0 10px 30px rgb(0 0 0 / .35);
+  display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.cut-line { position: absolute; left: 0; right: 0; top: 50%; border-top: 1px dashed #9aa3b5; }
+.cut-line span { position: absolute; left: 8mm; top: -2.2mm; padding: 0 2mm; background: #fff; font-size: 7pt; color: #9aa3b5; }
+.a5-bill { height: 148.5mm; box-sizing: border-box; padding: 9mm 11mm 8mm; display: flex; flex-direction: column; gap: 3.2mm; font-size: 9.5pt; line-height: 1.45; }
+.a5-empty { background: repeating-linear-gradient(135deg, transparent 0 6mm, #f4f6fa 6mm 6.6mm); }
+.a5-head { display: flex; justify-content: space-between; gap: 6mm; padding-bottom: 2.5mm; border-bottom: 1.2pt solid var(--brand); }
+.a5-head h2 { font-size: 14pt; color: var(--brand); }
+.a5-head p { font-size: 8pt; color: #555; max-width: 95mm; }
+.a5-meta { text-align: right; flex: none; }
+.a5-meta h3 { font-size: 13pt; color: var(--accent); }
+.a5-meta p { font-size: 8.5pt; color: #333; max-width: none; }
+.a5-to { display: grid; grid-template-columns: auto 1fr auto; gap: 6mm; align-items: end; }
+.a5-to div { display: flex; flex-direction: column; }
+.a5-to span { font-size: 7.5pt; color: #666; }
+.a5-room { font-family: var(--display); font-size: 18pt; line-height: 1; color: var(--brand); }
+.a5-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.a5-table th { background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: 8pt; padding: 1.6mm 2mm; text-align: right; }
+.a5-table th:first-child, .a5-table td:first-child { text-align: left; }
+.a5-table td { padding: 1.5mm 2mm; border-bottom: .5pt solid #dde3ee; text-align: right; font-variant-numeric: tabular-nums; }
+.a5-table tfoot td { border-bottom: 0; border-top: 1.2pt solid #111; font-weight: 700; font-size: 11.5pt; padding-top: 2mm; }
+.a5-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; gap: 8mm; }
+.a5-pay { font-size: 8.5pt; background: #f4f6fa; border-left: 2pt solid var(--accent); padding: 2mm 3mm; border-radius: 1mm; }
+.a5-paid { border-left-color: var(--green); color: var(--green); font-size: 10pt; }
+.a5-sign { flex: none; width: 42mm; text-align: center; }
+.a5-sign span { display: block; border-bottom: .6pt solid #333; height: 9mm; }
+.a5-sign small { font-size: 7.5pt; color: #666; }
+.col-check { width: 36px; }
+.row-selected td { background: var(--brand-soft); }
+
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  html, body { background: #fff !important; }
+  body.printing { overflow: visible; }
+  body.printing > *:not(#print-root) { display: none !important; }
+  #print-root { position: static; overflow: visible; background: none; opacity: 1 !important; }
+  .print-toolbar { display: none; }
+  .print-pages { padding: 0; overflow: visible; }
+  .a4-sheet { margin: 0; box-shadow: none; break-after: page; page-break-after: always; }
+  .a4-sheet:last-child { break-after: auto; page-break-after: auto; }
+  .a5-empty { background: none; }
+}
