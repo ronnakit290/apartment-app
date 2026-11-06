@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "apartment-api", "runtimeExecutable": "bun", "runtimeArgs": ["--cwd", "backend", "run", "dev"], "port": 3000 },
+    { "name": "apartment-web", "runtimeExecutable": "bun", "runtimeArgs": ["--cwd", "frontend", "run", "dev"], "port": 5173 }
+  ]
+}
